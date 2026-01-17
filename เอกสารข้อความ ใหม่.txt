@@ -1,0 +1,1788 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush } from 'recharts';
+import { Package, TrendingUp, TrendingDown, Calendar, FileText, User, Trash2, X, FlaskConical, History, BarChart3, PlayCircle, AlertTriangle, LoaderCircle } from 'lucide-react';
+
+ LoadingOverlay Component
+const LoadingOverlay = ({ message }) = (
+  div className=fixed inset-0 bg-black bg-opacity-60 flex flex-col items-center justify-center z-50
+    LoaderCircle className=w-16 h-16 text-white animate-spin mb-4 
+    p className=text-white text-xl font-semibold{message}p
+  div
+);
+
+ CustomAlertModal Component
+const CustomAlertModal = ({ title, message, onClose, onConfirm, showCancel = false, confirmText = 'ตกลง', cancelText = 'ยกเลิก', showPasswordInput = false, onPasswordChange, passwordValue, correctPassword }) = {
+  const [error, setError] = useState('');
+
+  const handlePasswordInputChange = (e) = {
+    setError('');
+    onPasswordChange(e.target.value);
+  };
+
+  const handleConfirmAction = () = {
+    if (showPasswordInput) {
+      if (passwordValue === correctPassword) {
+        if (onConfirm) onConfirm();
+        onClose();
+      } else {
+        setError('รหัสผ่านผิด');
+        onPasswordChange('');
+      }
+    } else {
+      if (onConfirm) onConfirm();
+      onClose();
+    }
+  };
+
+  return (
+    div className=fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4
+      div className=bg-white rounded-2xl max-w-xs w-full p-8 shadow-2xl transform scale-100 transition-transform duration-300 ease-out relative
+        button onClick={onClose} className=absolute top-2 right-2 text-gray-400 hovertext-gray-600
+          X size={24} 
+        button
+        div className=text-center
+          h3 className=text-2xl font-bold text-gray-800 mb-4{title}h3
+          {message && p className=text-gray-700 mb-6 whitespace-pre-wrap{message}p}
+          
+          {showPasswordInput  (
+            
+              div className=mb-6
+                input
+                  type=password
+                  placeholder=P A S S W O R D
+                  autoFocus
+                  className={`w-full px-4 py-3 border-2 rounded-lg text-lg text-center ${error  'border-red-500'  'border-gray-300'} focusring-2 focusring-blue-500 focusborder-blue-500`}
+                  value={passwordValue}
+                  onChange={handlePasswordInputChange}
+                  onKeyDown={(e) = {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleConfirmAction();
+                    }
+                  }}
+                
+                {error && p className=text-red-500 text-sm mt-2{error}p}
+              div
+              div className=flex gap-4
+                button onClick={onClose} className=flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hoverbg-gray-50 transition-colors
+                  {cancelText}
+                button
+                button onClick={handleConfirmAction} className=flex-1 px-4 py-3 bg-blue-500 text-white rounded-lg font-semibold hoverbg-blue-600 transition-colors
+                  {confirmText}
+                button
+              div
+            
+          )  (
+            div className=flex gap-4
+              {showCancel && (
+                button onClick={onClose} className=flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hoverbg-gray-50 transition-colors
+                  {cancelText}
+                button
+              )}
+              button onClick={handleConfirmAction} className={`flex-1 px-4 py-3 bg-blue-500 text-white rounded-lg font-semibold hoverbg-blue-600 transition-colors ${showCancel  ''  'w-full'}`}
+                {confirmText}
+              button
+            div
+          )}
+        div
+      div
+    div
+  );
+};
+
+ Custom Tooltip for Charts
+const CustomTooltip = ({ active, payload, label, xAxisKey, year, month }) = {
+  if (active && payload && payload.length) {
+    let formattedLabel = label;
+    if (xAxisKey === 'day' && year && month !== null && month = 0) {
+      const date = new Date(year, month, label);
+      if (!isNaN(date)) {
+        formattedLabel = date.toLocaleDateString('th-TH', { weekday 'long', day 'numeric', month 'short' });
+      }
+    }
+
+    return (
+      div className=bg-white p-3 border border-gray-300 rounded-lg shadow-lg
+        p className=font-bold mb-2{`${formattedLabel}`}p
+        {payload.map((entry, index) = (
+          p key={`item-${index}`} style={{ color entry.color }}
+            {`${entry.name}  ${entry.value.toLocaleString()}`}
+          p
+        ))}
+      div
+    );
+  }
+  return null;
+};
+
+
+const App = () = {
+   Google Sheets configuration
+  const GOOGLE_SHEETS_CONFIG = {
+    webAppUrl 'httpsscript.google.commacrossAKfycbyfxWs81WEsrizNnTi82tZAOH_EHX1hKnvUoqsARpYch3TTjEqz5oepiol_vWQ4lK3G0gexec',
+    spreadsheetId '18_aq1sA-m7W0ZPOvPs1RDtEoZUIY-9PabPghKo6ZfjE'
+  };
+
+   Helper to format date to YYYY-MM-DD for input type=date
+  const formatDateForInput = (date) = {
+    const d = new Date(date);
+    let month = '' + (d.getMonth() + 1);
+    let day = '' + d.getDate();
+    const year = d.getFullYear();
+    if (month.length  2) month = '0' + month;
+    if (day.length  2) day = '0' + day;
+    return [year, month, day].join('-');
+  };
+  
+  const parseCSDateString = (dateInput) = {
+    if (!dateInput) return new Date('invalid');
+    if (dateInput instanceof Date) return dateInput;
+
+    if (typeof dateInput === 'string') {
+        const parts = dateInput.split(', ');
+        if (parts.length !== 2) return new Date('invalid');
+
+        const dateParts = parts[0].split('');
+        const timeParts = parts[1].split('');
+
+        if (dateParts.length !== 3  (timeParts.length !== 2 && timeParts.length !== 3)) return new Date('invalid');
+        
+        const day = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;  JS month is 0-indexed
+        const year = parseInt(dateParts[2], 10);
+        const hours = parseInt(timeParts[0], 10);
+        const minutes = parseInt(timeParts[1], 10);
+        const seconds = timeParts.length === 3  parseInt(timeParts[2], 10)  0;
+
+        const date = new Date(year, month, day, hours, minutes, seconds);
+        if (isNaN(date.getTime())) {
+            return new Date('invalid');
+        }
+        return date;
+    }
+
+    return new Date('invalid');
+  };
+
+  const formatDateTimeForDisplay = (date) = {
+    if (!date  !(date instanceof Date)  isNaN(date.getTime())) return '';
+    return date.toLocaleString('en-GB', {
+        day '2-digit',
+        month '2-digit',
+        year 'numeric',
+        hour '2-digit',
+        minute '2-digit',
+        second '2-digit',
+        hour12 false
+    }).replace(',', '');
+  };
+
+   Initial values for filters
+  const currentYear = new Date().getFullYear();
+  const currentMonth = (new Date().getMonth() + 1).toString();
+  const todayFormatted = formatDateForInput(new Date());
+
+   States for managing data and UI
+  const [records, setRecords] = useState([]);
+  const [productionRecords, setProductionRecords] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+
+   Form states
+  const [formData, setFormData] = useState({ name '', status '', quantity '', images [], selectedDate todayFormatted });
+  const [todayProduced, setTodayProduced] = useState('');
+
+   UI states
+  const [currentPage, setCurrentPage] = useState('inventory');
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [debounceTimer, setDebounceTimer] = useState(null);
+  const [currentImagePreview, setCurrentImagePreview] = useState(null);
+
+   Alert modal states
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertOnConfirm, setAlertOnConfirm] = useState(null);
+  const [alertShowCancel, setAlertShowCancel] = useState(false);
+  const [alertConfirmText, setAlertConfirmText] = useState('ตกลง');
+  const [alertCancelText, setAlertCancelText] = useState('ยกเลิก');
+  const [alertPasswordValue, setAlertPasswordValue] = useState('');
+  const [alertShowPasswordInput, setAlertShowPasswordInput] = useState(false);
+  const [alertCorrectPassword, setAlertCorrectPassword] = useState('');
+
+   Filter states for records table
+  const [filterYear, setFilterYear] = useState(currentYear.toString()); 
+  const [filterMonth, setFilterMonth] = useState(currentMonth); 
+  const [filterStatus, setFilterStatus] = useState('');
+
+   Filter states for production table
+  const [productionFilterYear, setProductionFilterYear] = useState(currentYear.toString());
+  const [productionFilterMonth, setProductionFilterMonth] = useState(currentMonth);
+
+   Filter states for general chart
+  const [chartYear, setChartYear] = useState(currentYear.toString());
+  const [isChartYearFilterActive, setIsChartYearFilterActive] = useState(true); 
+  const [isChartMonthFilterActive, setIsChartMonthFilterActive] = useState(true);
+  const [chartSelectedMonth, setChartSelectedMonth] = useState(currentMonth);
+  const [chartStatusFilter, setChartStatusFilter] = useState('');
+
+   Filter states for production chart
+  const [productionChartYear, setProductionChartYear] = useState(currentYear.toString());
+  const [productionChartMonth, setProductionChartMonth] = useState(currentMonth);
+  const [isProductionChartYearFilterActive, setIsProductionChartYearFilterActive] = useState(true); 
+  const [isProductionChartMonthFilterActive, setIsProductionChartMonthFilterActive] = useState(true);
+
+   Effect to reset modal-related states when page changes
+  useEffect(() = {
+    setShowModal(false);
+    setSelectedRecord(null);
+    setShowAlertModal(false);
+    setAlertTitle('');
+    setAlertMessage('');
+    setAlertOnConfirm(null);
+    setAlertShowCancel(false);
+    setAlertConfirmText('ตกลง');
+    setAlertCancelText('ยกเลิก');
+    setAlertPasswordValue('');
+    setAlertShowPasswordInput(false);
+    setCurrentImagePreview(null);
+  }, [currentPage]);
+
+   Google Sheets API functions
+  const sendToGoogleSheets = async (data, type) = {
+    if (!GOOGLE_SHEETS_CONFIG.webAppUrl) {
+      console.warn('Google Sheets not configured');
+      return false;
+    }
+    try {
+      const payload = { action 'add', type, data };
+      await fetch(GOOGLE_SHEETS_CONFIG.webAppUrl, {
+        method 'POST',
+        body JSON.stringify(payload),
+        mode 'no-cors'
+      });
+      console.log('Add request sent successfully.');
+      setConnectionStatus('connected');
+      return true;
+    } catch (error) {
+      console.error('Error sending to Google Sheets', error);
+      setConnectionStatus('error');
+      openAlert('แจ้งเตือน', 'บันทึกข้อมูลในเครื่องแล้ว แต่ไม่สามารถซิงค์กับ Google Sheets ได้ในขณะนี้');
+      return false;
+    }
+  };
+
+    const deleteFromGoogleSheets = async (id, type) = {
+        if (!GOOGLE_SHEETS_CONFIG.webAppUrl) {
+            console.warn('Google Sheets not configured');
+            return false;
+        }
+        setLoadingMessage('กำลังลบข้อมูล...');
+        setIsLoading(true);
+        try {
+            const payload = { action 'delete', type, data { id } };
+            await fetch(GOOGLE_SHEETS_CONFIG.webAppUrl, {
+                method 'POST',
+                body JSON.stringify(payload),
+                mode 'no-cors'
+            });
+            console.log(`Delete request for id ${id} in ${type} sent successfully.`);
+            return true;
+        } catch (error) {
+            console.error('Error deleting from Google Sheets', error);
+            openAlert('ข้อผิดพลาด', 'ไม่สามารถลบข้อมูลจาก Google Sheets ได้ แต่ข้อมูลจะถูกลบออกจากหน้าเว็บนี้');
+            return false;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const clearSheetInGoogleSheets = async (sheetName) = {
+        if (!GOOGLE_SHEETS_CONFIG.webAppUrl) {
+            console.warn('Google Sheets not configured');
+            return false;
+        }
+        setLoadingMessage('กำลังล้างข้อมูล...');
+        setIsLoading(true);
+        try {
+            const payload = { action 'clearSheet', type sheetName };
+            await fetch(GOOGLE_SHEETS_CONFIG.webAppUrl, {
+                method 'POST',
+                body JSON.stringify(payload),
+                mode 'no-cors'
+            });
+            console.log(`Clear sheet request for ${sheetName} sent successfully.`);
+            return true;
+        } catch (error) {
+            console.error(`Error clearing ${sheetName} in Google Sheets`, error);
+            openAlert('ข้อผิดพลาด', `ไม่สามารถล้างข้อมูลในชีต ${sheetName} ได้`);
+            return false;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+  const loadFromGoogleSheets = async (manageLoadingState = true) = {
+    if (!GOOGLE_SHEETS_CONFIG.webAppUrl) {
+      console.warn('Google Sheets not configured');
+      return;
+    }
+    if(manageLoadingState) {
+      setLoadingMessage('กำลังโหลดข้อมูล...');
+      setIsLoading(true);
+    }
+    try {
+      console.log('Loading from Google Sheets...');
+      
+      const url = `${GOOGLE_SHEETS_CONFIG.webAppUrl}action=load&t=${Date.now()}`;
+      
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Load failed with status ${response.status}`);
+      }
+
+      const text = await response.text();
+      if (!text) throw new Error('Empty response from Google Sheets');
+      
+      const result = JSON.parse(text);
+      
+      if (result.success) {
+        if (result.data && result.data.records) {
+          const parsedRecords = result.data.records.map(record = {
+            let imagesArray = [];
+            if (record.images && typeof record.images === 'string') {
+              try {
+                 First, try to parse it as a JSON array (for new data)
+                imagesArray = JSON.parse(record.images);
+              } catch (e) {
+                 If parsing fails, it might be an old single Base64 string
+                if (record.images.startsWith('dataimage')) {
+                  imagesArray = [record.images];
+                }
+              }
+            }
+            return {
+              ...record,
+              quantity parseFloat(String(record.quantity).replace(,g, ''))  0,
+              timestamp parseCSDateString(record.timestamp),
+              images imagesArray
+            };
+          });
+          setRecords(parsedRecords);
+        }
+
+        if (result.data && result.data.production) {
+          const parsedProduction = result.data.production.map(record = ({
+            ...record,
+            bags parseInt(String(record.bags).replace(,g, ''), 10)  0,
+            kilos parseInt(String(record.kilos).replace(,g, ''), 10)  0,
+            timestamp parseCSDateString(record.timestamp)
+          }));
+          setProductionRecords(parsedProduction);
+        }
+
+        setConnectionStatus('connected');
+        console.log('Successfully loaded data from Google Sheets');
+      } else {
+        throw new Error(result.error  'Unknown error from Google Sheets');
+      }
+    } catch (error) {
+      console.error('Error loading from Google Sheets', error);
+      if (error instanceof TypeError) {
+        openAlert(
+          'ข้อผิดพลาดในการเชื่อมต่อ', 
+          'ไม่สามารถโหลดข้อมูลจาก Google Sheets ได้ กรุณาตรวจสอบการตั้งค่าสคริปต์ (ต้อง Deploy และให้สิทธิ์การเข้าถึงแก่ ทุกคน) และการเชื่อมต่ออินเทอร์เน็ตของคุณ'
+        );
+      } else {
+        openAlert('เกิดข้อผิดพลาด', 'ไม่สามารถโหลดข้อมูลได้ ' + error.message);
+      }
+      setConnectionStatus('disconnected');
+      console.log('Using local data only');
+    } finally {
+      if(manageLoadingState) {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  useEffect(() = {
+    loadFromGoogleSheets();
+  }, []);
+
+  const openAlert = (title, message, onConfirm = null, showCancel = false, confirmText = 'ตกลง', cancelText = 'ยกเล็ก', showPasswordInput = false, correctPassword = '') = {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertOnConfirm(() = onConfirm);
+    setAlertShowCancel(showCancel);
+    setAlertConfirmText(confirmText);
+    setAlertCancelText(cancelText);
+    setAlertPasswordValue('');
+    setAlertShowPasswordInput(showPasswordInput);
+    setAlertCorrectPassword(correctPassword);
+    setShowAlertModal(true);
+  };
+
+  const closeAlert = () = {
+    setShowAlertModal(false);
+    setAlertTitle('');
+    setAlertMessage('');
+    setAlertOnConfirm(null);
+    setAlertShowCancel(false);
+    setAlertConfirmText('ตกลง');
+    setAlertCancelText('ยกเลิก');
+    setAlertPasswordValue('');
+    setAlertShowPasswordInput(false);
+    setAlertCorrectPassword('');
+  };
+
+  const handleTodayProducedChange = (e) = {
+    const value = e.target.value;
+    setTodayProduced(value);
+    setShowConfirmModal(false);
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (value && value  0) {
+      setDebounceTimer(setTimeout(() = setShowConfirmModal(true), 1000));
+    }
+  };
+
+  const handleConfirmSubmit = () = {
+    handleProductionSubmit();
+    setShowConfirmModal(false);
+  };
+
+  const handleCancelSubmit = () = {
+    setTodayProduced('');
+    setShowConfirmModal(false);
+    if (debounceTimer) clearTimeout(debounceTimer);
+  };
+
+  const handleInputChange = (e) = {
+    const { name, value } = e.target;
+    if (name === 'status') {
+      setFormData(prev = ({ ...prev, [name] value, name '' }));
+    } else if (name === 'name' && formData.status === 'ขายออก') {
+      return;
+    } else {
+      setFormData(prev = ({ ...prev, [name] value }));
+    }
+  };
+
+  const handleImageChange = async (e) = {
+    const files = Array.from(e.target.files);
+    if (files.length  1) {
+      openAlert('ข้อผิดพลาด', 'สามารถเลือกรูปภาพได้เพียง 1 รูปเท่านั้น');
+      e.target.value = null;
+      return;
+    }
+    
+    const imagePromises = files.map(file = {
+      return new Promise((resolve) = {
+        const reader = new FileReader();
+        reader.onload = (e) = resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
+    });
+    
+    const base64Images = await Promise.all(imagePromises);
+    setFormData(prev = ({ ...prev, images base64Images }));
+  };
+
+  const removeImage = (index) = {
+    setFormData(prev = ({ ...prev, images prev.images.filter((_, i) = i !== index) }));
+  };
+
+  const handleDetailsClick = (record) = {
+    setSelectedRecord(record);
+    setShowModal(true);
+  };
+
+  const closeModal = () = {
+    setShowModal(false);
+    setSelectedRecord(null);
+    setCurrentImagePreview(null);
+  };
+
+  const getTodayTotalProduction = () = {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return productionRecords.reduce((total, record) = {
+      const recordDate = new Date(record.timestamp);
+      recordDate.setHours(0, 0, 0, 0);
+      return recordDate.getTime() === today.getTime()  total + record.bags  total;
+    }, 0);
+  };
+
+  const getMonthlyTotalProduction = useMemo(() = {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+    return productionRecords.reduce((total, record) = {
+      const recordDate = new Date(record.timestamp);
+      if (recordDate.getFullYear() === currentYear && recordDate.getMonth() === currentMonth) {
+        return total + record.bags;
+      }
+      return total;
+    }, 0);
+  }, [productionRecords]);
+
+  const readyForShipping = useMemo(() = {
+    const totalProducedBags = productionRecords.reduce((total, record) = total + record.bags, 0);
+    const totalSoldBags = records
+        .filter(record = record.status === 'ขายออก')
+        .reduce((total, record) = total + (record.quantity  10), 0);
+    return totalProducedBags - totalSoldBags;
+  }, [records, productionRecords]);
+
+  const handleProductionSubmit = async () = {
+    if (!todayProduced  todayProduced = 0) {
+      openAlert('ข้อผิดพลาด', 'กรุณากรอกจำนวนที่ทำได้วันนี้');
+      return;
+    }
+    const newProductionRecord = {
+      bags parseInt(todayProduced),
+      kilos parseInt(todayProduced)  10
+    };
+    
+    setLoadingMessage('กำลังบันทึกข้อมูล...');
+    setIsLoading(true);
+    const success = await sendToGoogleSheets(newProductionRecord, 'Production');
+    if (success) {
+      setTimeout(async () = {
+          await loadFromGoogleSheets(false);
+          setIsLoading(false);
+          openAlert('สำเร็จ', 'บันทึกข้อมูลเรียบร้อยแล้ว');
+      }, 2500);
+    } else {
+        setIsLoading(false);
+    }
+    setTodayProduced('');
+  };
+
+  const handleSubmit = async () = {
+    if (!formData.quantity  !formData.status  (formData.status === 'ซื้อเข้า' && !formData.name)) {
+      openAlert('ข้อผิดพลาด', 'กรุณากรอกข้อมูลให้ครบถ้วน');
+      return;
+    }
+
+    let finalQuantityForRecord = parseFloat(formData.quantity);
+    
+    if (formData.status === 'ขายออก') {
+      const soldBags = parseFloat(formData.quantity);
+      if (soldBags  readyForShipping) {
+        openAlert('ข้อผิดพลาด', `จำนวนที่ขายออก (${soldBags.toLocaleString()} กระสอบ) เกินกว่าจำนวนของพร้อมส่ง (${readyForShipping.toLocaleString()} กระสอบ)`);
+        return;
+      }
+      finalQuantityForRecord = soldBags  10;
+    }
+
+    const newRecord = {
+      name formData.name  'ลูกค้า',
+      status formData.status,
+      quantity finalQuantityForRecord,
+      images formData.images
+    };
+    
+    setLoadingMessage('กำลังบันทึกข้อมูล...');
+    setIsLoading(true);
+    const success = await sendToGoogleSheets(newRecord, 'Records');
+    if (success) {
+        setTimeout(async () = {
+            await loadFromGoogleSheets(false);
+            setIsLoading(false);
+            openAlert('สำเร็จ', 'บันทึกข้อมูลเรียบร้อยแล้ว');
+        }, 2500);
+    } else {
+        setIsLoading(false);
+    }
+    setFormData({ name '', status '', quantity '', images [], selectedDate todayFormatted });
+  };
+
+    const handleDeleteRecord = (id, status, quantity) = {
+        openAlert(
+            'ยืนยันการลบ',
+            `คุณต้องการลบรายการ ID ${id}nกรุณากรอกรหัสผ่านเพื่อยืนยัน`,
+            async () = {
+                await deleteFromGoogleSheets(id, 'Records');
+                setRecords(prevRecords = prevRecords.filter(record = record.id !== id));
+                openAlert('สำเร็จ', 'ลบข้อมูลเรียบร้อยแล้ว');
+            },
+            true, 'ลบ', 'ยกเลิก', true, '4455'
+        );
+    };
+
+    const handleDeleteProductionRecord = (id, bags) = {
+        openAlert(
+            'ยืนยันการลบ',
+            `คุณต้องการลบรายการ ID ${id}nกรุณากรอกรหัสผ่านเพื่อยืนยัน`,
+            async () = {
+                await deleteFromGoogleSheets(id, 'Production');
+                setProductionRecords(prevRecords = prevRecords.filter(record = record.id !== id));
+                openAlert('สำเร็จ', 'ลบข้อมูลเรียบร้อยแล้ว');
+            },
+            true, 'ลบ', 'ยกเลิก', true, '4455'
+        );
+    };
+
+    const handleClearPageData = (sheetName) = {
+        openAlert(
+            `ยืนยันการล้างข้อมูลหน้า${sheetName === 'Production'  'ปริมาณสินค้า'  'รายงานสถานะ'}`,
+            'การกระทำนี้ไม่สามารถย้อนกลับได้ ข้อมูลทั้งหมดในหน้านี้จะถูกลบอย่างถาวร กรุณากรอกรหัสผ่านเพื่อยืนยัน',
+            async () = {
+                const success = await clearSheetInGoogleSheets(sheetName);
+                if (success) {
+                    if (sheetName === 'Production') {
+                        setProductionRecords([]);
+                    } else if (sheetName === 'Records') {
+                        setRecords([]);
+                    }
+                    openAlert('สำเร็จ', 'ข้อมูลในหน้านี้ถูกล้างเรียบร้อยแล้ว');
+                }
+            },
+            true,
+            'ยืนยันการล้างข้อมูล',
+            'ยกเลิก',
+            true,
+            '062261'
+        );
+    };
+
+  const getFilteredRecords = () = {
+    let filtered = [...records];
+    if (filterYear) {
+      const selectedYear = parseInt(filterYear);
+      filtered = filtered.filter(record = record.timestamp.getFullYear() === selectedYear);
+    }
+    if (filterMonth) {
+      filtered = filtered.filter(record = (record.timestamp.getMonth() + 1).toString() === filterMonth);
+    }
+    if (filterStatus) {
+      filtered = filtered.filter(record = record.status === filterStatus);
+    }
+    return filtered.reverse();
+  };
+
+  const getFilteredProductionRecords = () = {
+    let filtered = [...productionRecords];
+    if (productionFilterYear) {
+      const selectedYear = parseInt(productionFilterYear);
+      filtered = filtered.filter(record = record.timestamp.getFullYear() === selectedYear);
+    }
+    if (productionFilterMonth) {
+      filtered = filtered.filter(record = (record.timestamp.getMonth() + 1).toString() === productionFilterMonth);
+    }
+    return filtered.reverse();
+  };
+
+  const getAvailableYears = () = {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let year = 2020; year = currentYear + 5; year++) {
+      years.push(year);
+    }
+    return years.sort((a, b) = b - a);
+  };
+
+  const getThaiMonthName = (monthNumber) = {
+    const monthNames = [
+      'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน',
+      'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม',
+      'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+    ];
+    return monthNames[parseInt(monthNumber) - 1];
+  };
+
+  const prepareChartData = (dataRecords, filterConfig, dataType) = {
+    let filteredData = [...dataRecords];
+    let xAxisKey = '';
+    let aggregatedData = {};
+    let totalSummary = { totalBuyIn 0, totalSellOut 0 };
+
+    const selectedYear = parseInt(filterConfig.year);
+    const selectedMonth = parseInt(filterConfig.month) - 1;
+
+    if (filterConfig.yearActive) {
+      filteredData = filteredData.filter(record = record.timestamp.getFullYear() === selectedYear);
+    }
+
+    if (filterConfig.monthActive) {
+      filteredData = filteredData.filter(record = record.timestamp.getMonth() === selectedMonth);
+    }
+
+    if (filterConfig.yearActive && filterConfig.monthActive) {
+      xAxisKey = 'day';
+      const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+      for (let day = 1; day = daysInMonth; day++) {
+        aggregatedData[day] = { day day };
+        if (dataType === 'general') {
+          aggregatedData[day]['ซื้อเข้า'] = 0;
+          aggregatedData[day]['ขายออก'] = 0;
+        } else {
+          aggregatedData[day]['จำนวนกระสอบที่ผลิตได้'] = 0;
+        }
+      }
+    } else if (filterConfig.yearActive && !filterConfig.monthActive) {
+      xAxisKey = 'month';
+      const monthOrder = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+      monthOrder.forEach(monthName = {
+        aggregatedData[monthName] = { month monthName };
+        if (dataType === 'general') {
+          aggregatedData[monthName]['ซื้อเข้า'] = 0;
+          aggregatedData[monthName]['ขายออก'] = 0;
+        } else {
+          aggregatedData[monthName]['จำนวนกระสอบที่ผลิตได้'] = 0;
+        }
+      });
+    } else {
+      xAxisKey = 'year';
+      if (dataType === 'production' && filterConfig.monthActive && !filterConfig.yearActive) {
+        xAxisKey = 'period';
+        const allYearsInRecords = [...new Set(dataRecords.map(r = r.timestamp.getFullYear()))].sort((a, b) = a - b);
+        allYearsInRecords.forEach(y = {
+          const monthName = new Date(y, selectedMonth, 1).toLocaleDateString('th-TH', { month 'long' });
+          const key = `${monthName} ${y}`;
+          aggregatedData[key] = { period key, 'จำนวนกระสอบที่ผลิตได้' 0 };
+        });
+      } else {
+        const allYearsInRecords = [...new Set(dataRecords.map(r = r.timestamp.getFullYear()))].sort((a, b) = a - b);
+        allYearsInRecords.forEach(y = {
+          aggregatedData[y] = { year y };
+          if (dataType === 'general') {
+            aggregatedData[y]['ซื้อเข้า'] = 0;
+            aggregatedData[y]['ขายออก'] = 0;
+          } else {
+            aggregatedData[y]['จำนวนกระสอบที่ผลิตได้'] = 0;
+          }
+        });
+      }
+    }
+
+    filteredData.forEach(record = {
+      let key;
+      if (xAxisKey === 'day') {
+        key = record.timestamp.getDate();
+      } else if (xAxisKey === 'month') {
+        key = record.timestamp.toLocaleDateString('th-TH', { month 'long' });
+      } else if (xAxisKey === 'period') {
+        const monthName = new Date(record.timestamp.getFullYear(), record.timestamp.getMonth(), 1).toLocaleDateString('th-TH', { month 'long' });
+        key = `${monthName} ${record.timestamp.getFullYear()}`;
+      } else {
+        key = record.timestamp.getFullYear();
+      }
+
+      if (aggregatedData[key]) {
+        if (dataType === 'general') {
+          if (filterConfig.statusFilter === ''  record.status === filterConfig.statusFilter) {
+            if (record.status === 'ซื้อเข้า') {
+              aggregatedData[key]['ซื้อเข้า'] += record.quantity;
+              if (filterConfig.yearActive && filterConfig.monthActive) {
+                totalSummary.totalBuyIn += record.quantity;
+              }
+            } else {
+              aggregatedData[key]['ขายออก'] += record.quantity;
+              if (filterConfig.yearActive && filterConfig.monthActive) {
+                totalSummary.totalSellOut += record.quantity;
+              }
+            }
+          }
+        } else {
+          aggregatedData[key]['จำนวนกระสอบที่ผลิตได้'] += record.bags;
+        }
+      }
+    });
+
+    let finalChartData = Object.values(aggregatedData);
+
+    if (xAxisKey === 'month') {
+      const monthOrder = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+      finalChartData.sort((a, b) = monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month));
+    } else if (xAxisKey === 'year'  xAxisKey === 'day') {
+      finalChartData.sort((a, b) = a[xAxisKey] - b[xAxisKey]);
+    } else if (xAxisKey === 'period') {
+      finalChartData.sort((a, b) = {
+        const yearA = parseInt(a.period.split(' ')[1]);
+        const yearB = parseInt(b.period.split(' ')[1]);
+        return yearA - yearB;
+      });
+    }
+
+    if (dataType === 'general') {
+      return { data finalChartData, xAxisKey xAxisKey, summary totalSummary };
+    } else {
+      return finalChartData;
+    }
+  };
+
+  const filteredRecords = useMemo(() = getFilteredRecords(), [records, filterYear, filterMonth, filterStatus]);
+  const filteredProductionRecords = useMemo(() = getFilteredProductionRecords(), [productionRecords, productionFilterYear, productionFilterMonth]);
+  const availableYears = useMemo(() = getAvailableYears(), []);
+  
+  const monthlyStats = useMemo(() = {
+    let filtered = records;
+    if (filterYear) {
+      const selectedYear = parseInt(filterYear);
+      filtered = filtered.filter(record = record.timestamp.getFullYear() === selectedYear);
+    }
+    if (filterMonth) {
+        const selectedMonthIndex = parseInt(filterMonth) - 1;
+        filtered = filtered.filter(record = record.timestamp.getMonth() === selectedMonthIndex);
+    }
+
+    return filtered.reduce((acc, record) = {
+        if (record.status === 'ซื้อเข้า') {
+            acc.totalIn += record.quantity;
+        } else if (record.status === 'ขายออก') {
+            acc.totalOut += record.quantity;
+        }
+        return acc;
+    }, { totalIn 0, totalOut 0 });
+  }, [records, filterYear, filterMonth]);
+  
+  const currentMonthName = useMemo(() = {
+    if(filterMonth) return getThaiMonthName(filterMonth);
+    return 'เดือนปัจจุบัน';
+  }, [filterMonth]);
+
+  const { data chartData, xAxisKey, summary chartSummary } = useMemo(() = prepareChartData(
+    records,
+    {
+      year chartYear,
+      month chartSelectedMonth,
+      yearActive isChartYearFilterActive,
+      monthActive isChartMonthFilterActive,
+      statusFilter chartStatusFilter
+    },
+    'general'
+  ), [records, chartYear, chartSelectedMonth, isChartYearFilterActive, isChartMonthFilterActive, chartStatusFilter]);
+
+  const productionChartData = useMemo(() = prepareChartData(
+    productionRecords,
+    {
+      year productionChartYear,
+      month productionChartMonth,
+      yearActive isProductionChartYearFilterActive,
+      monthActive isProductionChartMonthFilterActive,
+      statusFilter ''
+    },
+    'production'
+  ), [productionRecords, productionChartYear, productionChartMonth, isProductionChartYearFilterActive, isProductionChartMonthFilterActive]);
+
+  const chartBrushIndices = useMemo(() = {
+    if (!isChartMonthFilterActive  chartData.length = 10) {
+      return { startIndex undefined, endIndex undefined };
+    }
+    const lastDataIndex = chartData.findLastIndex(d = (d['ซื้อเข้า']  0) + (d['ขายออก']  0)  0);
+
+    if (lastDataIndex === -1) {
+      return { startIndex Math.max(0, chartData.length - 10), endIndex chartData.length - 1 };
+    }
+
+    const endIndex = Math.min(chartData.length - 1, lastDataIndex + 4);
+    const startIndex = Math.max(0, endIndex - 9);
+
+    return { startIndex, endIndex };
+  }, [chartData, isChartMonthFilterActive]);
+
+  const productionBrushIndices = useMemo(() = {
+    if (!isProductionChartMonthFilterActive  productionChartData.length = 10) {
+        return { startIndex undefined, endIndex undefined };
+    }
+    const lastDataIndex = productionChartData.findLastIndex(d = d['จำนวนกระสอบที่ผลิตได้']  0);
+
+    if (lastDataIndex === -1) {
+        return { startIndex Math.max(0, productionChartData.length - 10), endIndex productionChartData.length - 1 };
+    }
+    
+    const endIndex = Math.min(productionChartData.length - 1, lastDataIndex + 4);
+    const startIndex = Math.max(0, endIndex - 9);
+    
+    return { startIndex, endIndex };
+  }, [productionChartData, isProductionChartMonthFilterActive]);
+
+  if (currentPage === 'inventory') {
+    return (
+      div className=min-h-screen bg-gradient-to-br from-emerald-100 to-green-200 p-4 mdp-8 relative
+        button
+            onClick={() = openAlert('กรุณากรอกรหัสผ่าน', 'เพื่อเข้าสู่หน้ารายงานสถานะสินค้า', () = setCurrentPage('management'), true, 'ยืนยัน', 'ยกเลิก', true, '4455')}
+            className=absolute top-8 right-8 z-20 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-5 py-3 rounded-full font-semibold shadow-lg hovershadow-xl transform hoverscale-105 transition-all duration-300 flex items-center gap-2
+        
+            FileText size={20} 
+            spanรายงานสถานะสินค้าspan
+        button
+
+        {isLoading && LoadingOverlay message={loadingMessage} }
+        {showAlertModal && CustomAlertModal title={alertTitle} message={alertMessage} onClose={closeAlert} onConfirm={alertOnConfirm} showCancel={alertShowCancel} confirmText={alertConfirmText} cancelText={alertCancelText} showPasswordInput={alertShowPasswordInput} passwordValue={alertPasswordValue} onPasswordChange={setAlertPasswordValue} correctPassword={alertCorrectPassword} }
+        {showModal && selectedRecord && (
+          div className=fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 smp-4
+            div className=bg-white rounded-xl smrounded-2xl w-full max-w-sm smmax-w-2xl lgmax-w-4xl p-4 smp-6 lgp-8 shadow-2xl transform scale-100 transition-transform duration-300 ease-out max-h-[95vh] overflow-y-auto
+              h3 className=text-lg smtext-xl lgtext-2xl font-bold text-gray-800 mb-4 smmb-6 text-centerรูปภาพประกอบรายการh3
+              {selectedRecord.images && selectedRecord.images.length  0  (
+                div className=mb-4 smmb-6
+                  div className=grid grid-cols-1 smgrid-cols-2 gap-3 smgap-4 lggap-6
+                    {selectedRecord.images.map((image, index) = (
+                      div key={index} className=relative group
+                        img
+                          src={image}
+                          alt={`ประกอบ ${index + 1}`}
+                          className=w-full h-40 smh-48 mdh-56 lgh-80 object-contain rounded-lg shadow-md cursor-pointer hoveropacity-90 transition-opacity border border-gray-200 bg-gray-50
+                          onClick={() = setCurrentImagePreview(image)}
+                          onError={(e) = { e.target.onerror = null; e.target.src=httpsplacehold.co400x300cccccc000000text=Image+Not+Found; }}
+                        
+                        div className=absolute bottom-2 right-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs smtext-sm
+                          รูปที่ {index + 1}
+                        div
+                      div
+                    ))}
+                  div
+                div
+              )  (
+                div className=text-center py-8 smpy-12
+                  Package className=w-12 h-12 smw-16 smh-16 mx-auto mb-3 smmb-4 text-gray-300 
+                  p className=text-gray-500 text-base smtext-lgไม่มีรูปภาพสำหรับรายการนี้p
+                div
+              )}
+
+              {currentImagePreview && (
+                div className=fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 p-2 smp-4
+                  div className=relative w-full h-full flex items-center justify-center
+                    button
+                      onClick={() = setCurrentImagePreview(null)}
+                      className=absolute top-2 right-2 smtop-4 smright-4 bg-white bg-opacity-90 hoverbg-opacity-100 rounded-full p-2 smp-3 shadow-lg transition-all z-10
+                      title=ปิดรูปภาพ
+                    
+                      X className=w-5 h-5 smw-6 smh-6 text-gray-700 
+                    button
+                    img 
+                      src={currentImagePreview} 
+                      alt=Preview 
+                      className=max-w-full max-h-full object-contain rounded-lg shadow-2xl
+                      style={{ maxWidth '95vw', maxHeight '95vh' }}
+                    
+                    div className=absolute bottom-4 left-12 transform -translate-x-12 bg-black bg-opacity-60 text-white px-3 py-2 rounded-full text-sm smhidden
+                      แตะเพื่อปิด
+                    div
+                  div
+                div
+              )}
+
+              button
+                onClick={closeModal}
+                className=w-full bg-blue-500 text-white py-2.5 smpy-3 rounded-lg font-semibold hoverbg-blue-600 transition-colors text-base smtext-lg
+              
+                ปิด
+              button
+            div
+          div
+        )}
+
+        div className=max-w-7xl mx-auto space-y-8 mdmax-w-full lgmax-w-7xl
+          div className=text-center pt-16
+            h1 className=text-5xl font-black text-gray-800 mb-2 mdtext-6xlปริมาณสินค้าh1
+            p className=text-lg text-gray-600 mb-8 mdtext-xlเกล็ดปลาตากแห้งp
+          div
+
+          div className=flex justify-center
+            div className=flex flex-wrap justify-center gap-4 max-w-7xl mx-auto mdmax-w-full lgmax-w-7xl
+              div className=bg-gradient-to-br from-emerald-100 to-emerald-200 border border-emerald-300 p-6 rounded-3xl shadow-xl hovershadow-2xl transition-all duration-300 hoverscale-105 relative flex flex-col justify-between min-w-[280px] flex-1 mdmin-w-[300px]
+                div className=flex items-center justify-between mb-4
+                  h3 className=text-lg font-semibold text-emerald-800 mdtext-xlจำนวนที่ทำได้วันนี้h3
+                  div className=bg-emerald-500 p-2 rounded-full
+                    Package className=w-6 h-6 text-white 
+                  div
+                div
+                div className=text-center relative
+                  p className=text-5xl font-bold text-emerald-900 mb-2 mdtext-6xl{getTodayTotalProduction().toLocaleString()}p
+                  div className=bg-emerald-500 text-white px-3 py-1 rounded-full text-sm font-medium absolute bottom-0 right-0
+                    กระสอบ
+                  div
+                div
+              div
+              div className=bg-gradient-to-br from-violet-100 to-violet-200 border border-violet-300 p-6 rounded-3xl shadow-xl hovershadow-2xl transition-all duration-300 hoverscale-105 relative flex flex-col justify-between min-w-[280px] flex-1 mdmin-w-[300px]
+                div className=flex items-center justify-between mb-4
+                  h3 className=text-lg font-semibold text-violet-800 mdtext-xl whitespace-nowrapจำนวนที่ทำได้ ({currentMonthName})h3
+                  div className=bg-violet-500 p-2 rounded-full
+                    Calendar className=w-6 h-6 text-white 
+                  div
+                div
+                div className=text-center relative
+                  p className=text-5xl font-bold text-violet-900 mb-2 mdtext-6xl{getMonthlyTotalProduction.toLocaleString()}p
+                  div className=bg-violet-500 text-white px-3 py-1 rounded-full text-sm font-medium absolute bottom-0 right-0
+                    กระสอบ
+                  div
+                div
+              div
+              div className=bg-gradient-to-br from-sky-100 to-sky-200 border border-sky-300 p-6 rounded-3xl shadow-xl hovershadow-2xl transition-all duration-300 hoverscale-105 relative flex flex-col justify-between min-w-[280px] flex-1 mdmin-w-[300px]
+                div className=flex items-center justify-between mb-4
+                  h3 className=text-lg font-semibold text-sky-800 mdtext-xlจำนวนของพร้อมส่งh3
+                  div className=bg-sky-500 p-2 rounded-full
+                    TrendingUp className=w-6 h-6 text-white 
+                  div
+                div
+                div className=text-center relative
+                  p className=text-5xl font-bold text-sky-900 mb-2 mdtext-6xl{readyForShipping.toLocaleString()}p
+                  div className=bg-sky-500 text-white px-3 py-1 rounded-full text-sm font-medium absolute bottom-0 right-0
+                    กระสอบ
+                  div
+                div
+              div
+            div
+          div
+
+          div className=bg-white80 backdrop-blur-sm rounded-3xl shadow-xl border border-white20 p-8 mdp-10
+            div className=flex items-center gap-3 mb-8
+              div className=bg-gradient-to-r from-emerald-500 to-teal-600 p-3 rounded-2xl
+                FlaskConical className=w-6 h-6 text-white 
+              div
+              h2 className=text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent mdtext-4xl
+                บันทึกการผลิตวันนี้
+              h2
+            div
+            div className=space-y-6
+              div className=flex items-center justify-center gap-4 mdgap-6
+                label className=text-lg font-semibold text-slate-700 mdtext-xlจำนวนที่ทำได้วันนี้label
+                input
+                  type=number
+                  value={todayProduced}
+                  onChange={handleTodayProducedChange}
+                  className=w-32 px-4 py-3 text-2xl font-bold text-center border-2 border-gray-300 rounded-xl focusring-2 focusring-blue-500 focusborder-blue-500 bg-white placeholdertext-center mdw-40 mdtext-3xl mdpy-4
+                  placeholder=0
+                  min=0
+                  style={{ appearance 'textfield', MozAppearance 'textfield' }}
+                
+                span className=text-lg font-semibold text-slate-700 mdtext-xlกระสอบspan
+              div
+            div
+          div
+
+          {showConfirmModal && (
+            div className=fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4
+              div className=bg-white rounded-2xl max-w-md w-full p-8 shadow-2xl transform scale-100 transition-transform duration-300 ease-out
+                div className=text-center
+                  h3 className=text-2xl font-bold text-gray-800 mb-4ยืนยันการบันทึกh3
+                  div className=bg-amber-50 rounded-lg p-4 mb-6
+                    p className=text-lg text-amber-800 mb-2จำนวนที่ทำได้วันนี้p
+                    p className=text-3xl font-bold text-amber-600 mb-2
+                      {parseInt(todayProduced  0).toLocaleString()} กระสอบ
+                    p
+                    p className=text-sm text-gray-600
+                      ({(parseInt(todayProduced  0)  10).toLocaleString()} กิโลกรัม)
+                    p
+                    p className=text-sm text-gray-600 mt-2
+                      วันที่ {new Date().toLocaleDateString('en-GB')}
+                    p
+                  div
+                  div className=flex gap-4
+                    button
+                      onClick={handleCancelSubmit}
+                      className=flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hoverbg-gray-50 font-medium transition-colors
+                    
+                      ยกเลิก
+                    button
+                    button
+                      onClick={handleConfirmSubmit}
+                      className=flex-1 px-4 py-3 bg-amber-600 text-white rounded-lg hoverbg-amber-700 font-medium transition-colors
+                    
+                      ยืนยัน
+                    button
+                  div
+                div
+              div
+            div
+          )}
+
+          div className=bg-white80 backdrop-blur-sm rounded-3xl shadow-xl border border-white20 p-8 mdp-10
+            div className=flex items-center gap-3 mb-8
+              div className=bg-gradient-to-r from-emerald-500 to-teal-600 p-3 rounded-2xl
+                History className=w-6 h-6 text-white 
+              div
+              h2 className=text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent mdtext-4xl
+                รายการผลิตย้อนหลัง
+              h2
+            div
+
+            div className=mb-6 flex flex-wrap items-center gap-4 mdgap-6
+              div className=flex items-center gap-2
+                label className=text-sm font-semibold text-slate-700 whitespace-nowrap mdtext-baseปีlabel
+                select
+                  value={productionFilterYear}
+                  onChange={(e) = setProductionFilterYear(e.target.value)}
+                  className=px-4 py-2 border-2 border-gray-300 rounded-xl focusring-4 focusring-blue-50020 focusborder-blue-500 transition-all duration-200 bg-white min-w-[120px] mdmin-w-[140px] mdtext-base mdpy-2.5
+                
+                  option value=ทั้งหมดoption
+                  {availableYears.map(year = (option key={year} value={year}{year}option))}
+                select
+              div
+              div className=flex items-center gap-2
+                label className=text-sm font-semibold text-slate-700 whitespace-nowrap mdtext-baseเดือนlabel
+                select
+                  value={productionFilterMonth}
+                  onChange={(e) = setProductionFilterMonth(e.target.value)}
+                  className=px-4 py-2 border-2 border-gray-300 rounded-xl focusring-4 focusring-blue-50020 focusborder-blue-500 transition-all duration-200 bg-white min-w-[120px] mdmin-w-[140px] mdtext-base mdpy-2.5
+                
+                  option value=ทั้งหมดoption
+                  {Array.from({ length 12 }, (_, i) = i + 1).map(monthNum = {
+                    const monthName = new Date(2000, monthNum - 1, 1).toLocaleDateString('th-TH', { month 'long' });
+                    return option key={monthNum} value={monthNum.toString()}{monthName}option;
+                  })}
+                select
+              div
+            div
+
+            div className=overflow-y-auto max-h-80 relative
+              table className=min-w-full bg-white
+                thead className=sticky top-0 bg-white z-10 shadow-sm
+                  tr
+                    th className=py-3 px-4 text-center text-sm font-semibold text-gray-700 mdtext-baseวันที่เวลาth
+                    th className=py-3 px-4 text-center text-sm font-semibold text-gray-700 mdtext-baseจำนวนกระสอบที่ผลิตได้th
+                    th className=py-3 px-4 text-center text-sm font-semibold text-gray-700 mdtext-baseจำนวน (KG)th
+                    th className=py-3 px-4 text-center text-sm font-semibold text-gray-700 mdtext-baseth
+                  tr
+                thead
+                tbody
+                  {filteredProductionRecords.length === 0  (
+                    tr
+                      td colSpan=4 className=text-center py-8 text-gray-500
+                        Package className=w-12 h-12 mx-auto mb-2 text-gray-300 
+                        pไม่พบรายการผลิตที่ตรงกับตัวกรองp
+                      td
+                    tr
+                  )  (
+                    filteredProductionRecords.map((record) = (
+                      tr key={record.id} className=border-b border-gray-100 hoverbg-gray-50
+                        td className=py-3 px-4 text-center text-sm text-gray-800 mdtext-base
+                          {formatDateTimeForDisplay(record.timestamp)}
+                        td
+                        td className=py-3 px-4 text-center text-sm text-gray-800 mdtext-base
+                          {record.bags.toLocaleString()} กระสอบ
+                        td
+                        td className=py-3 px-4 text-center text-sm text-gray-800 mdtext-base
+                          {record.kilos.toLocaleString()} กิโลกรัม
+                        td
+                        td className=py-3 px-4 text-center text-sm
+                          button
+                            onClick={() = handleDeleteProductionRecord(record.id, record.bags)}
+                            className=bg-red-100 text-red-700 p-2 rounded-full hoverbg-red-200 transition-colors
+                            title=ลบรายการ
+                          
+                            Trash2 className=w-5 h-5 
+                          button
+                        td
+                      tr
+                    ))
+                  )}
+                tbody
+              table
+            div
+          div
+
+          div className=bg-white80 backdrop-blur-sm rounded-3xl shadow-xl border border-white20 p-8 mdp-10
+            div className=flex items-center gap-3 mb-8
+              div className=bg-gradient-to-r from-emerald-500 to-teal-600 p-3 rounded-2xl
+                BarChart3 className=w-6 h-6 text-white 
+              div
+              h2 className=text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent mdtext-4xl
+                จำนวนที่ทำได้ในแต่ละวัน
+              h2
+            div
+            div className=mb-4 flex flex-col smflex-row items-start smitems-center gap-4 flex-wrap
+              div className=flex items-center gap-2
+                input
+                  type=checkbox
+                  id=toggleProductionChartYearFilter
+                  checked={isProductionChartYearFilterActive}
+                  onChange={(e) = {
+                    setIsProductionChartYearFilterActive(e.target.checked);
+                    if (!e.target.checked) {
+                      setIsProductionChartMonthFilterActive(false);
+                      setProductionChartMonth('');
+                    }
+                  }}
+                  className=form-checkbox h-5 w-5 text-blue-600 rounded
+                
+                label htmlFor=toggleProductionChartYearFilter className=font-medium text-gray-700 mdtext-baseปีlabel
+                select
+                  id=productionChartYear
+                  value={productionChartYear}
+                  onChange={(e) = setProductionChartYear(e.target.value)}
+                  className=px-3 py-2 border border-gray-300 rounded-lg focusring-2 focusring-blue-500 mdpx-4 mdpy-2.5 mdtext-base
+                  disabled={!isProductionChartYearFilterActive}
+                
+                  {availableYears.map(year = (option key={year} value={year}{year}option))}
+                select
+              div
+
+              div className=flex items-center gap-2
+                input
+                  type=checkbox
+                  id=toggleProductionChartMonthFilter
+                  checked={isProductionChartMonthFilterActive}
+                  onChange={(e) = {
+                    setIsProductionChartMonthFilterActive(e.target.checked);
+                    if (!e.target.checked) setProductionChartMonth('');
+                  }}
+                  className=form-checkbox h-5 w-5 text-blue-600 rounded
+                  disabled={!isProductionChartYearFilterActive}
+                
+                label htmlFor=toggleProductionChartMonthFilter className=font-medium text-gray-700 mdtext-baseเดือนlabel
+                select
+                  id=productionChartMonth
+                  value={productionChartMonth}
+                  onChange={(e) = setProductionChartMonth(e.target.value)}
+                  className=px-3 py-2 border border-gray-300 rounded-lg focusring-2 focusring-blue-500 mdpx-4 mdpy-2.5 mdtext-base
+                  disabled={!isProductionChartMonthFilterActive  !isProductionChartYearFilterActive}
+                
+                  option value=ทั้งหมดoption
+                  {Array.from({ length 12 }, (_, i) = i + 1).map(monthNum = {
+                    const monthName = new Date(2000, monthNum - 1, 1).toLocaleDateString('th-TH', { month 'long' });
+                    return option key={monthNum} value={monthNum.toString()}{monthName}option;
+                  })}
+                select
+              div
+            div
+
+            ResponsiveContainer width=100% height={300}
+              BarChart
+                data={productionChartData}
+                margin={{ top 20, right 30, left 20, bottom 5 }}
+              
+                CartesianGrid strokeDasharray=3 3 
+                XAxis dataKey={
+                  (isProductionChartYearFilterActive && isProductionChartMonthFilterActive)  day 
+                  (isProductionChartYearFilterActive && !isProductionChartMonthFilterActive)  month 
+                  (!isProductionChartYearFilterActive && isProductionChartMonthFilterActive)  period 
+                  year
+                } 
+                YAxis label={{ value 'จำนวนกระสอบ', angle -90, position 'insideLeft' }} 
+                Tooltip content={CustomTooltip 
+                                    xAxisKey={xAxisKey} 
+                                    year={isProductionChartYearFilterActive  parseInt(productionChartYear)  null} 
+                                    month={isProductionChartMonthFilterActive  parseInt(productionChartMonth) - 1  null} 
+                                  } 
+                Legend 
+                Bar dataKey=จำนวนกระสอบที่ผลิตได้ fill=#8884d8 name=กระสอบ 
+                 {productionChartData.length  10 && isProductionChartMonthFilterActive && (
+                  Brush 
+                    dataKey=day 
+                    height={30} 
+                    stroke=#8884d8 
+                    startIndex={productionBrushIndices.startIndex}
+                    endIndex={productionBrushIndices.endIndex}
+                  
+                )}
+              BarChart
+            ResponsiveContainer
+          div
+           div className=mt-8 text-right
+                button
+                    onClick={() = handleClearPageData('Production')}
+                    className=bg-red-600 text-white font-bold py-2 px-4 rounded-lg hoverbg-red-700 transition-colors flex items-center gap-2 ml-auto
+                
+                    AlertTriangle className=w-5 h-5 
+                    ล้างข้อมูลหน้านี้
+                button
+            div
+        div
+      div
+    );
+  }
+
+  if (currentPage === 'management') {
+    return (
+      div className=min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200 p-4 mdp-8
+        {isLoading && LoadingOverlay message={loadingMessage} }
+        {showAlertModal && CustomAlertModal title={alertTitle} message={alertMessage} onClose={closeAlert} onConfirm={alertOnConfirm} showCancel={alertShowCancel} confirmText={alertConfirmText} cancelText={alertCancelText} showPasswordInput={alertShowPasswordInput} passwordValue={alertPasswordValue} onPasswordChange={setAlertPasswordValue} correctPassword={alertCorrectPassword} }
+        {showModal && selectedRecord && (
+          div className=fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4
+            div className=bg-white rounded-2xl max-w-lg w-full p-8 shadow-2xl transform scale-100 transition-transform duration-300 ease-out
+              h3 className=text-2xl font-bold text-gray-800 mb-6 text-centerรูปภาพประกอบรายการh3
+        {showModal && selectedRecord && (
+          div className=fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4
+            div className=bg-white rounded-2xl max-w-4xl w-full p-8 shadow-2xl transform scale-100 transition-transform duration-300 ease-out max-h-[90vh] overflow-y-auto
+              h3 className=text-2xl font-bold text-gray-800 mb-6 text-centerรูปภาพประกอบรายการh3
+              {selectedRecord.images && selectedRecord.images.length  0  (
+                div className=mb-6
+                  div className=grid grid-cols-1 mdgrid-cols-2 gap-6 justify-center
+                    {selectedRecord.images.map((image, index) = (
+                      div key={index} className=relative group
+                        img
+                          src={image}
+                          alt={`ประกอบ ${index + 1}`}
+                          className=w-full h-64 mdh-80 object-contain rounded-lg shadow-md cursor-pointer hoveropacity-90 transition-opacity border border-gray-200
+                          onClick={() = setCurrentImagePreview(image)}
+                          onError={(e) = { e.target.onerror = null; e.target.src=httpsplacehold.co400x300cccccc000000text=Image+Not+Found; }}
+                        
+                        div className=absolute bottom-2 right-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-sm
+                          รูปที่ {index + 1}
+                        div
+                      div
+                    ))}
+                  div
+                div
+              )  (
+                div className=text-center py-12
+                  Package className=w-16 h-16 mx-auto mb-4 text-gray-300 
+                  p className=text-gray-500 text-lgไม่มีรูปภาพสำหรับรายการนี้p
+                div
+              )}
+
+              {currentImagePreview && (
+                div className=fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4
+                  div className=relative max-w-full max-h-full overflow-auto
+                    button
+                      onClick={() = setCurrentImagePreview(null)}
+                      className=absolute top-4 right-4 bg-white bg-opacity-80 hoverbg-opacity-100 rounded-full p-3 shadow-lg transition-all z-10
+                      title=ปิดรูปภาพ
+                    
+                      X className=w-6 h-6 text-gray-700 
+                    button
+                    img 
+                      src={currentImagePreview} 
+                      alt=Preview 
+                      className=max-w-full max-h-[95vh] object-contain rounded-lg shadow-2xl 
+                    
+                  div
+                div
+              )}
+
+              button
+                onClick={closeModal}
+                className=w-full bg-blue-500 text-white py-3 rounded-lg font-semibold hoverbg-blue-600 transition-colors text-lg
+              
+                ปิด
+              button
+            div
+          div
+        )}
+
+              button
+                onClick={closeModal}
+                className=w-full bg-blue-500 text-white py-3 rounded-lg font-semibold hoverbg-blue-600 transition-colors
+              
+                ปิด
+              button
+            div
+          div
+        )}
+
+        div className=max-w-7xl mx-auto space-y-8 mdmax-w-full lgmax-w-7xl
+          div className=text-center
+            button
+              onClick={() = setCurrentPage('inventory')}
+              className=mb-4 bg-white80 hoverbg-white text-gray-700 px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 mx-auto
+            
+              ← กลับไปหน้าปริมาณสินค้า
+            button
+            h1 className=text-5xl font-black text-gray-800 mb-2 mdtext-6xlรายงานสถานะสินค้าh1
+            p className=text-lg text-gray-600 mb-8 mdtext-xlเกล็ดปลาตากแห้งp
+          div
+
+          div className=flex flex-wrap justify-center gap-4 max-w-7xl mx-auto mdmax-w-full lgmax-w-7xl
+            div className=bg-gradient-to-br from-green-100 to-green-200 border border-green-300 p-6 rounded-3xl shadow-xl hovershadow-2xl transition-all duration-300 hoverscale-105 relative flex flex-col justify-between min-w-[280px] flex-1 mdmin-w-[300px]
+              div className=flex items-center justify-between mb-4
+                h3 className=text-lg font-semibold text-green-800 mdtext-xlซื้อเข้า ({currentMonthName})h3
+                div className=bg-green-500 p-2 rounded-full
+                  TrendingUp className=w-6 h-6 text-white 
+                div
+              div
+              div className=text-center relative
+                p className=text-5xl font-bold text-green-900 mb-2 mdtext-6xl{monthlyStats.totalIn.toLocaleString()}p
+                div className=bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium absolute bottom-0 right-0
+                  KG
+                div
+              div
+            div
+            div className=bg-gradient-to-br from-red-100 to-red-200 border border-red-300 p-6 rounded-3xl shadow-xl hovershadow-2xl transition-all duration-300 hoverscale-105 relative flex flex-col justify-between min-w-[280px] flex-1 mdmin-w-[300px]
+              div className=flex items-center justify-between mb-4
+                h3 className=text-lg font-semibold text-red-800 mdtext-xlขายออก ({currentMonthName})h3
+                div className=bg-red-500 p-2 rounded-full
+                  TrendingDown className=w-6 h-6 text-white 
+                div
+              div
+              div className=text-center relative
+                p className=text-5xl font-bold text-red-900 mb-2 mdtext-6xl{monthlyStats.totalOut.toLocaleString()}p
+                div className=bg-red-500 text-white px-3 py-1 rounded-full text-sm font-medium absolute bottom-0 right-0
+                  KG
+                div
+              div
+            div
+            div className=bg-gradient-to-br from-violet-100 to-violet-200 border border-violet-300 p-6 rounded-3xl shadow-xl hovershadow-2xl transition-all duration-300 hoverscale-105 relative flex flex-col justify-between min-w-[280px] flex-1 mdmin-w-[300px]
+              div className=flex items-center justify-between mb-4
+                h3 className=text-lg font-semibold text-violet-800 mdtext-xlของพร้อมส่งh3
+                div className=bg-violet-500 p-2 rounded-full
+                  Package className=w-6 h-6 text-white 
+                div
+              div
+              div className=text-center relative
+                p className=text-5xl font-bold text-violet-900 mb-2 mdtext-6xl{readyForShipping.toLocaleString()}p
+                div className=bg-violet-500 text-white px-3 py-1 rounded-full text-sm font-medium absolute bottom-0 right-0
+                  กระสอบ
+                div
+              div
+            div
+          div
+
+          div className=bg-white80 backdrop-blur-sm rounded-3xl shadow-xl border border-white20 p-8 mdp-10
+            div className=flex items-center gap-3 mb-8
+              div className=bg-gradient-to-r from-blue-500 to-purple-600 p-3 rounded-2xl
+                FileText className=w-6 h-6 text-white 
+              div
+              h2 className=text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mdtext-4xl
+                บันทึกรายการสินค้า
+              h2
+            div
+            div className=space-y-6
+              div className=grid grid-cols-1 smgrid-cols-2 gap-6
+                div className=space-y-2
+                  label className=block text-lg font-semibold text-slate-700 mdtext-xlสถานะlabel
+                  select
+                    name=status
+                    value={formData.status}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-4 border-2 rounded-2xl focusring-4 focusring-blue-50020 focusborder-blue-500 transition-all duration-200 text-lg font-medium mdtext-xl mdpy-5 ${
+                      formData.status === 'ซื้อเข้า'  'bg-emerald-50 border-emerald-300 text-emerald-700' 
+                      formData.status === 'ขายออก'  'bg-sky-50 border-sky-300 text-sky-700' 
+                      'bg-gray-50 border-gray-300 text-gray-500'
+                    }`}
+                  
+                    option value= className=text-gray-400กรุณาเลือกสถานะoption
+                    option value=ซื้อเข้า className=text-emerald-700📦 ซื้อเข้าoption
+                    option value=ขายออก className=text-sky-700🚛 ขายออกoption
+                  select
+                div
+                div className=space-y-2
+                  label className=block text-lg font-semibold text-slate-700 mdtext-xlชื่อลูกค้าผู้ขายlabel
+                  input
+                    type=text
+                    name=name
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-4 border-2 rounded-2xl focusring-4 focusring-blue-50020 focusborder-blue-500 transition-all duration-200 text-lg mdtext-xl mdpy-5 ${
+                      formData.status === 'ขายออก'  'bg-gray-100 cursor-not-allowed border-gray-300'  'bg-white border-gray-300 hoverborder-gray-400'
+                    }`}
+                    placeholder=กรอกชื่อ...
+                    readOnly={formData.status === 'ขายออก'}
+                  
+                div
+              div
+              div className=space-y-2
+                label className=block text-lg font-semibold text-slate-700 mdtext-xl
+                  จำนวน ({formData.status === 'ขายออก'  'กระสอบ'  'กิโลกรัม'})
+                label
+                div className=relative
+                  input
+                    type=number
+                    name=quantity
+                    value={formData.quantity}
+                    onChange={handleInputChange}
+                    className=w-full px-4 py-4 pr-16 border-2 rounded-2xl focusring-4 focusring-blue-50020 focusborder-blue-500 transition-all duration-200 text-lg bg-white border-gray-300 hoverborder-gray-400 mdtext-xl mdpy-5
+                    placeholder={formData.status === 'ขายออก'  'กรอกจำนวนเป็นกระสอบ'  'กรอกจำนวนเป็นกิโลกรัม'}
+                    min=0
+                    step=0.01
+                  
+                  div className=absolute right-4 top-12 transform -translate-y-12 text-gray-500 font-medium mdtext-lg
+                    {formData.status === 'ขายออก'  'กระสอบ'  'KG'}
+                  div
+                div
+              div
+              div className=space-y-2
+                label className=block text-lg font-semibold text-slate-700 mdtext-xlแนบรูปภาพ (1 รูป)label
+                input
+                  type=file
+                  accept=image
+                  onChange={handleImageChange}
+                  className=w-full px-4 py-4 border-2 border-dashed border-gray-300 rounded-2xl focusring-4 focusring-blue-50020 focusborder-blue-500 transition-all duration-200 text-lg bg-gray-50 hoverbg-gray-100 mdtext-xl mdpy-5
+                
+                {formData.images.length  0 && (
+                  div className=mt-4 grid grid-cols-2 gap-4
+                    {formData.images.map((image, index) = (
+                      div key={index} className=relative group
+                        img
+                          src={image}
+                          alt={`Preview ${index + 1}`}
+                          className=w-full h-24 object-cover rounded-xl border-2 border-gray-200 group-hoverborder-blue-400 transition-colors mdh-32
+                          onError={(e) = { e.target.onerror = null; e.target.src=httpsplacehold.co400x300cccccc000000text=Image+Not+Found; }}
+                        
+                        button
+                          type=button
+                          onClick={() = removeImage(index)}
+                          className=absolute -top-2 -right-2 bg-red-500 hoverbg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm transition-colors shadow-lg mdw-8 mdh-8 mdtext-base
+                        
+                          ×
+                        button
+                      div
+                    ))}
+                  div
+                )}
+              div
+              div className=flex gap-4
+                button
+                  type=button
+                  onClick={handleSubmit}
+                  disabled={isLoading}
+                  className={`w-full py-4 px-8 rounded-2xl font-semibold text-lg transition-all duration-300 shadow-lg hovershadow-xl transform hoverscale-[1.02] activescale-[0.98] mdtext-xl mdpy-5 ${
+                    isLoading 
+                       'bg-gray-400 text-white cursor-not-allowed' 
+                       'bg-gradient-to-r from-blue-500 to-purple-600 hoverfrom-blue-600 hoverto-purple-700 text-white'
+                  }`}
+                
+                  {isLoading  '🔄 กำลังบันทึก...'  '💾 บันทึกรายการ'}
+                button
+              div
+            div
+          div
+
+          div className=bg-white80 backdrop-blur-sm rounded-3xl shadow-xl border border-white20 p-8 mdp-10
+            div className=flex items-center gap-3 mb-8
+              div className=bg-gradient-to-r from-indigo-500 to-purple-600 p-3 rounded-2xl
+                Package className=w-6 h-6 text-white 
+              div
+              h2 className=text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mdtext-4xl
+                รายการสินค้าทั้งหมด
+              h2
+            div
+            div className=mb-6 flex flex-wrap items-center gap-4 mdgap-6
+              div className=flex items-center gap-2
+                label className=text-sm font-semibold text-slate-700 whitespace-nowrap mdtext-baseปีlabel
+                select
+                  value={filterYear}
+                  onChange={(e) = setFilterYear(e.target.value)}
+                  className=px-4 py-2 border-2 border-gray-300 rounded-xl focusring-4 focusring-blue-50020 focusborder-blue-500 transition-all duration-200 bg-white min-w-[120px] mdmin-w-[140px] mdtext-base mdpy-2.5
+                
+                  option value=ทั้งหมดoption
+                  {availableYears.map(year = (option key={year} value={year}{year}option))}
+                select
+              div
+              div className=flex items-center gap-2
+                label className=text-sm font-semibold text-slate-700 whitespace-nowrap mdtext-baseเดือนlabel
+                select
+                  value={filterMonth}
+                  onChange={(e) = setFilterMonth(e.target.value)}
+                  className=px-4 py-2 border-2 border-gray-300 rounded-xl focusring-4 focusring-blue-50020 focusborder-blue-500 transition-all duration-200 bg-white min-w-[120px] mdmin-w-[140px] mdtext-base mdpy-2.5
+                
+                  option value=ทั้งหมดoption
+                  {Array.from({ length 12 }, (_, i) = i + 1).map(monthNum = {
+                    const monthName = new Date(2000, monthNum - 1, 1).toLocaleDateString('th-TH', { month 'long' });
+                    return option key={monthNum} value={monthNum.toString()}{monthName}option;
+                  })}
+                select
+              div
+              div className=flex items-center gap-2
+                label className=text-sm font-semibold text-slate-700 whitespace-nowrap mdtext-baseสถานะlabel
+                select
+                  value={filterStatus}
+                  onChange={(e) = setFilterStatus(e.target.value)}
+                  className=px-4 py-2 border-2 border-gray-300 rounded-xl focusring-4 focusring-blue-50020 focusborder-blue-500 transition-all duration-200 bg-white min-w-[120px] mdmin-w-[140px] mdtext-base mdpy-2.5
+                
+                  option value=ทั้งหมดoption
+                  option value=ซื้อเข้าซื้อเข้าoption
+                  option value=ขายออกขายออกoption
+                select
+              div
+            div
+            div className=overflow-y-auto max-h-96 relative
+              table className=min-w-full bg-white
+                thead className=sticky top-0 bg-white z-10 shadow-sm
+                  tr
+                    th className=py-3 px-4 text-center text-sm font-semibold text-gray-700 mdtext-baseวันที่เวลาth
+                    th className=py-3 px-4 text-center text-sm font-semibold text-gray-700 mdtext-baseชื่อ  สถานะth
+                    th className=py-3 px-4 text-center text-sm font-semibold text-gray-700 mdtext-baseจำนวน (KG)th
+                    th className=py-3 px-4 text-center text-sm font-semibold text-gray-700 mdtext-baseรายละเอียดth
+                    th className=py-3 px-4 text-center text-sm font-semibold text-gray-700 mdtext-baseth
+                  tr
+                thead
+                tbody
+                  {filteredRecords.length === 0  (
+                    tr
+                      td colSpan=5 className=text-center py-8 text-gray-500
+                        Package className=w-12 h-12 mx-auto mb-2 text-gray-300 
+                        pไม่พบรายการสินค้าที่ตรงกับตัวกรองp
+                      td
+                    tr
+                  )  (
+                    filteredRecords.map((record) = (
+                      tr key={record.id} className=border-b border-gray-100 hoverbg-gray-50
+                        td className=py-3 px-4 text-center text-sm text-gray-800 mdtext-base
+                          {formatDateTimeForDisplay(record.timestamp)}
+                        td
+                        td className=py-3 px-4 text-center text-sm text-gray-800 mdtext-base
+                          {record.name}{' '}
+                          span className={`px-2 py-1 rounded-full text-xs font-semibold inline-block ${
+                            record.status === 'ซื้อเข้า'  'bg-green-600 text-white' 
+                            'bg-blue-400 text-white'
+                          }`}
+                            {record.status}
+                          span
+                        td
+                        td className=py-3 px-4 text-center text-sm text-gray-800 mdtext-base
+                          {record.quantity.toLocaleString()} KG
+                          {record.status === 'ขายออก' && (
+                            
+                              br 
+                              span className=text-xs text-gray-600
+                                (จำนวน {(record.quantity  10).toLocaleString()} กระสอบ)
+                              span
+                            
+                          )}
+                        td
+                        td className=py-3 px-4 text-center text-sm
+                          button
+                            onClick={() = handleDetailsClick(record)}
+                            className=bg-blue-100 text-blue-700 px-3 py-1 rounded-md text-sm hoverbg-blue-200 mdpx-4 mdpy-2 mdtext-base
+                          
+                            ดูรายละเอียด
+                          button
+                        td
+                        td className=py-3 px-4 text-center text-sm
+                          button
+                            onClick={() = handleDeleteRecord(record.id, record.status, record.quantity)}
+                            className=bg-red-100 text-red-700 p-2 rounded-full hoverbg-red-200 transition-colors
+                            title=ลบรายการ
+                          
+                            Trash2 className=w-5 h-5 
+                          button
+                        td
+                      tr
+                    ))
+                  )}
+                tbody
+              table
+            div
+          div
+
+          div className=bg-white rounded-2xl shadow-lg p-8 mdp-10
+            h2 className=text-2xl font-bold text-gray-800 mb-6 mdtext-3xl
+              ภาพรวมปริมาณสินค้า (KG)
+            h2
+            div className=mb-4 flex flex-col smflex-row items-start smitems-center gap-4 flex-wrap
+              div className=flex items-center gap-2
+                input
+                  type=checkbox
+                  id=toggleChartYearFilter
+                  checked={isChartYearFilterActive}
+                  onChange={(e) = {
+                    setIsChartYearFilterActive(e.target.checked);
+                    if (!e.target.checked) {
+                      setIsChartMonthFilterActive(false);
+                      setChartSelectedMonth('');
+                    }
+                  }}
+                  className=form-checkbox h-5 w-5 text-blue-600 rounded
+                
+                label htmlFor=toggleChartYearFilter className=font-medium text-gray-700 mdtext-baseปีlabel
+                select
+                  value={chartYear}
+                  onChange={(e) = setChartYear(e.target.value)}
+                  className=px-3 py-2 border border-gray-300 rounded-lg focusring-2 focusring-blue-500 mdpx-4 mdpy-2.5 mdtext-base
+                  disabled={!isChartYearFilterActive}
+                
+                  {availableYears.map(year = (option key={year} value={year}{year}option))}
+                select
+              div
+
+              div className=flex items-center gap-2
+                input
+                  type=checkbox
+                  id=toggleChartMonthFilter
+                  checked={isChartMonthFilterActive}
+                  onChange={(e) = {
+                    setIsChartMonthFilterActive(e.target.checked);
+                    if (!e.target.checked) setChartSelectedMonth('');
+                  }}
+                  className=form-checkbox h-5 w-5 text-blue-600 rounded
+                  disabled={!isChartYearFilterActive}
+                
+                label htmlFor=toggleChartMonthFilter className=font-medium text-gray-700 mdtext-baseเดือนlabel
+                select
+                  value={chartSelectedMonth}
+                  onChange={(e) = setChartSelectedMonth(e.target.value)}
+                  className=px-3 py-2 border border-gray-300 rounded-lg focusring-2 focusring-blue-500 mdpx-4 mdpy-2.5 mdtext-base
+                  disabled={!isChartMonthFilterActive  !isChartYearFilterActive}
+                
+                  option value=ทั้งหมดoption
+                  {Array.from({ length 12 }, (_, i) = i + 1).map(monthNum = {
+                    const monthName = new Date(2000, monthNum - 1, 1).toLocaleDateString('th-TH', { month 'long' });
+                    return option key={monthNum} value={monthNum.toString()}{monthName}option;
+                  })}
+                select
+              div
+
+              div className=flex items-center gap-2
+                label htmlFor=chartStatusFilter className=font-medium text-gray-700 mdtext-baseสถานะlabel
+                select
+                  id=chartStatusFilter
+                  value={chartStatusFilter}
+                  onChange={(e) = setChartStatusFilter(e.target.value)}
+                  className=px-3 py-2 border border-gray-300 rounded-lg focusring-2 focusring-blue-500 mdpx-4 mdpy-2.5 mdtext-base
+                
+                  option value=ทั้งหมดoption
+                  option value=ซื้อเข้าซื้อเข้าoption
+                  option value=ขายออกขายออกoption
+                select
+              div
+            div
+
+            {isChartYearFilterActive && isChartMonthFilterActive && chartSelectedMonth && (
+              div className=mt-4 mb-4 flex flex-wrap justify-center items-center gap-4 p-4 bg-blue-50 rounded-lg shadow-inner mdgap-6 mdtext-base
+                span className=text-gray-600 text-base font-semibold
+                  (เดือน{getThaiMonthName(chartSelectedMonth)} ปี {chartYear})
+                span
+                div className=flex items-center gap-2
+                  span className=w-4 h-4 rounded-full bg-green-500span
+                  span className=text-blue-700นำเข้า span className=font-semibold text-green-700{chartSummary.totalBuyIn.toLocaleString()} KGspanspan
+                div
+                div className=flex items-center gap-2
+                  span className=w-4 h-4 rounded-full bg-blue-500span
+                  span className=text-blue-700ส่งออก span className=font-semibold text-blue-700{chartSummary.totalSellOut.toLocaleString()} KGspanspan
+                div
+              div
+            )}
+
+            ResponsiveContainer width=100% height={300}
+              BarChart
+                data={chartData}
+                margin={{ top 20, right 30, left 20, bottom 5 }}
+              
+                CartesianGrid strokeDasharray=3 3 
+                XAxis dataKey={xAxisKey} 
+                YAxis 
+                Tooltip content={CustomTooltip 
+                                    xAxisKey={xAxisKey} 
+                                    year={isChartYearFilterActive  parseInt(chartYear)  null} 
+                                    month={isChartMonthFilterActive  parseInt(chartSelectedMonth) - 1  null} 
+                                  } 
+                Legend 
+                {chartStatusFilter !== 'ขายออก' && Bar dataKey=ซื้อเข้า fill=#4CAF50 name=ซื้อเข้า (KG) }
+                {chartStatusFilter !== 'ซื้อเข้า' && Bar dataKey=ขายออก fill=#2196F3 name=ขายออก (KG) }
+                {chartData.length  10 && isChartMonthFilterActive && (
+                  Brush 
+                    dataKey=day 
+                    height={30} 
+                    stroke=#8884d8 
+                    startIndex={chartBrushIndices.startIndex}
+                    endIndex={chartBrushIndices.endIndex}
+                  
+                )}
+              BarChart
+            ResponsiveContainer
+          div
+           div className=mt-8 text-right
+                button
+                    onClick={() = handleClearPageData('Records')}
+                    className=bg-red-600 text-white font-bold py-2 px-4 rounded-lg hoverbg-red-700 transition-colors flex items-center gap-2 ml-auto
+                
+                    AlertTriangle className=w-5 h-5 
+                    ล้างข้อมูลหน้านี้
+                button
+            div
+        div
+      div
+    );
+  }
+
+  return null;
+};
+
+export default App;
